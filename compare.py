@@ -1,20 +1,19 @@
 import cv2
 import os
 import numpy as np
-'''
-'''
+
 # Define the directory path
 directory_ours = "./Prediction"
-Mask_directory = f'{directory_ours}/Masks'
-Position_directory = f'{directory_ours}/Position'
+Mask_directory = directory_ours + "/Masks"
+Position_directory = directory_ours + "/Position"
 
 directory_truth = "./Pred_Official"
-Mask_Off_directory = f'{directory_truth}/Masks'
-Position_Off_directory = f'{directory_truth}/Position'
+Mask_Off_directory = directory_truth + "/Masks"
+Position_Off_directory = directory_truth + "/Position"
 
 diff_directory = "./Diff"
-mask_diff_directory = f"{diff_directory}/Mask"
-mask_diff_txt_directory = f"{diff_directory}/PositionDiff"
+mask_diff_directory = diff_directory + "/Mask"
+mask_diff_txt_directory = diff_directory + "/PositionDiff"
 
 class_names = ['drivable', 'alternatives', 'line', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
                'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
@@ -51,7 +50,7 @@ def Read_Txt(directory, basename):
 
     data_arrays = []
     for filename in basename:
-        filename = f'{filename}.txt'
+        filename = filename + '.txt'
         file_path = os.path.join(directory, filename)
         #Tensor_Map = defaultdict(list)
         try:
@@ -238,15 +237,15 @@ for off_pos, pos, filename in zip(Off_Positions, Positions, sorted_basename):
         has_missing_ours = True
         missing_ours = np.empty((0, 7))
     
-    common_A, common_B, remain_off, remain_our = find_common_elements(missing_officials, missing_ours)
+    common_off, common_ours, remain_off, remain_our = find_common_elements(missing_officials, missing_ours)
     
-    drawMask(filename, common_A, 'common')
+    drawMask(filename, common_off, 'common')
     drawMask(filename, remain_off, 'off')
     drawMask(filename, remain_our, 'ours')
 
     with open(f'{mask_diff_txt_directory}/{filename}.txt', 'w') as file:
 
-        for rowA, rowB in zip(common_A, common_B):
+        for rowA, rowB in zip(common_off, common_ours):
             file.write(' '.join(map(str, rowA)) + '\n')
             file.write(' '.join(map(str, rowB)) + '\n')
         
