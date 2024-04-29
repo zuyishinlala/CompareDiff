@@ -3,15 +3,15 @@ import os
 import numpy as np
 
 # Define the directory path
-directory_ours = "./Predictions"
+directory_ours = "./Pred_10"
 Mask_directory = directory_ours + "/Masks"
 Position_directory = directory_ours + "/Position"
 
-directory_truth = "./Pred_Official_13"
-Mask_Off_directory = directory_truth + "/Masks"
-Position_Off_directory = directory_truth + "/Position"
+directory_off = "./Off_10"
+Mask_Off_directory = directory_off + "/Masks"
+Position_Off_directory = directory_off + "/Position"
 
-diff_directory = "./Diff_13"
+diff_directory = "./Diff_10"
 mask_diff_directory = diff_directory + "/Mask"
 mask_diff_txt_directory = diff_directory + "/PositionDiff"
 
@@ -165,10 +165,8 @@ check_directory(diff_directory)
 Masks, sorted_basename = Read_Images(Mask_directory)
 Positions = Read_Txt(Position_directory, sorted_basename)
 
-
 Off_Masks, _  = Read_Images(Mask_Off_directory)
 Off_Positions = Read_Txt(Position_Off_directory, sorted_basename)
-
 
 check_directory(mask_diff_directory)
 check_directory(mask_diff_txt_directory)
@@ -196,8 +194,10 @@ for key, image in Off_Masks.items():
 for off_pos, pos, filename in zip(Off_Positions, Positions, sorted_basename):
     print(f'===={filename}====')
     # Calculate IOU
-    IoU = calculate_iou_array(off_pos, pos) # 12 * 11
+    IoU = calculate_iou_array(off_pos, pos)
     common_off, common_ours, remain_off, remain_our = [], [], [], []
+    Num_Of_Accuracy = np.empty(4)
+
     if IoU.shape[0] != 0 and IoU.shape[1] != 0:
         max_elements_row = np.amax(IoU, axis=1)  # Maximum elements along axis 1 (rows)
         max_elements_col = np.amax(IoU, axis=0)  # Max Column
@@ -205,9 +205,6 @@ for off_pos, pos, filename in zip(Off_Positions, Positions, sorted_basename):
         bound = 0.98
         missing_indices_row = np.where(max_elements_row < bound)[0]
         missing_indices_col = np.where(max_elements_col < bound)[0]
-
-        print(f'Missing Off indices {missing_indices_row}')
-        print(f'Missing Ours indices {missing_indices_col}')
 
         missing_officials = off_pos[missing_indices_row]
         if len(missing_officials) > 0:
@@ -226,22 +223,31 @@ for off_pos, pos, filename in zip(Off_Positions, Positions, sorted_basename):
         common_off, common_ours, remain_off, remain_our = find_common_elements(missing_officials, missing_ours)
 
     elif IoU.shape[0] != 0 or IoU.shape[1] != 0:
+
         if IoU.shape[0] == 0:
             scalar_array = np.full((pos.shape[0], 1), 0.0)
             remain_our = np.concatenate((pos, scalar_array), axis=1)
-            print('Remain Ours:')
-            print(remain_our)
+
         if IoU.shape[1] == 0: 
             scalar_array = np.full((off_pos.shape[0], 1), 0.0)
             remain_off = np.concatenate((off_pos, scalar_array), axis=1)
-            print('Remain Official:')
-            print(remain_off)
+
+    # Record Num of accuracy
+    Num_Of_Accuracy[0] = len(pos) - len(common_ours) # 100% IOU
+    Num_Of_Accuracy[1] = len(common_ours)            # < 0.98 IOU
+    Num_Of_Accuracy[2] = len(remain_off)             # Missing Off
+    Num_Of_Accuracy[3] = len(remain_our)             # Missing Ours
+
+    Accuracy = [str(element) for element in Num_Of_Accuracy]
 
     drawMask(filename, common_off, 'common')
     drawMask(filename, remain_off, 'off')
     drawMask(filename, remain_our, 'ours')
 
     with open(f'{mask_diff_txt_directory}/{filename}.txt', 'w') as file:
+
+        file.write(' '.join(Accuracy))
+        file.write("\n===\n")
 
         for rowA, rowB in zip(common_off, common_ours):
             file.write(' '.join(map(str, rowA)) + '\n')
@@ -252,10 +258,10 @@ for off_pos, pos, filename in zip(Off_Positions, Positions, sorted_basename):
         for row in remain_off:
             file.write(' '.join(map(str, row)) + '\n')
 
-        # Add "===" between arrays
         file.write("===\n")
 
         for row in remain_our:
             file.write(' '.join(map(str, row))  + '\n')
-    
+
 print(f"Store Compared Results into {diff_directory}")
+
