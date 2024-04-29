@@ -3,27 +3,19 @@ import os
 import numpy as np
 
 # Define the directory path
-directory_ours = "./Prediction"
+directory_ours = "./Predictions"
 Mask_directory = directory_ours + "/Masks"
 Position_directory = directory_ours + "/Position"
 
-directory_truth = "./Pred_Official"
+directory_truth = "./Pred_Official_13"
 Mask_Off_directory = directory_truth + "/Masks"
 Position_Off_directory = directory_truth + "/Position"
 
-diff_directory = "./Diff"
+diff_directory = "./Diff_13"
 mask_diff_directory = diff_directory + "/Mask"
 mask_diff_txt_directory = diff_directory + "/PositionDiff"
 
-class_names = ['drivable', 'alternatives', 'line', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
-               'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
-               'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
-               'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
-               'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
-               'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
-               'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
-               'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
-               'hair drier', 'toothbrush']
+class_names = ['drivable', 'alternatives', 'line']
 
 class_names = { index: class_name for index, class_name in enumerate(class_names)}
 
@@ -50,9 +42,8 @@ def Read_Txt(directory, basename):
 
     data_arrays = []
     for filename in basename:
-        filename = filename + '.txt'
+        filename = str(filename) + '.txt'
         file_path = os.path.join(directory, filename)
-        #Tensor_Map = defaultdict(list)
         try:
             with open(file_path, 'r') as file:
                 lines = file.readlines()
@@ -206,39 +197,46 @@ for off_pos, pos, filename in zip(Off_Positions, Positions, sorted_basename):
     print(f'===={filename}====')
     # Calculate IOU
     IoU = calculate_iou_array(off_pos, pos) # 12 * 11
+    common_off, common_ours, remain_off, remain_our = [], [], [], []
+    if IoU.shape[0] != 0 and IoU.shape[1] != 0:
+        max_elements_row = np.amax(IoU, axis=1)  # Maximum elements along axis 1 (rows)
+        max_elements_col = np.amax(IoU, axis=0)  # Max Column
 
-    max_elements_row = np.amax(IoU, axis=1)  # Maximum elements along axis 1 (rows)
-    max_elements_col = np.amax(IoU, axis=0)  # Max Column
+        bound = 0.98
+        missing_indices_row = np.where(max_elements_row < bound)[0]
+        missing_indices_col = np.where(max_elements_col < bound)[0]
 
-    bound = 0.98
-    missing_indices_row = np.where(max_elements_row < bound)[0]
-    missing_indices_col = np.where(max_elements_col < bound)[0]
+        print(f'Missing Off indices {missing_indices_row}')
+        print(f'Missing Ours indices {missing_indices_col}')
 
-    has_missing_off = False
-    has_missing_ours = False
+        missing_officials = off_pos[missing_indices_row]
+        if len(missing_officials) > 0:
+            missing_IOU_off = max_elements_row[missing_indices_row]
+            missing_officials = np.concatenate((missing_officials,  np.expand_dims(missing_IOU_off, axis=1)), axis=1)
+        else:
+            missing_officials = np.empty((0, 7))
 
-    print(f'Missing Off indices {missing_indices_row}')
-    print(f'Missing Ours indices {missing_indices_col}')
+        missing_ours = pos[missing_indices_col]
+        if len(missing_ours) > 0:
+            missing_IOU_our = max_elements_col[missing_indices_col]
+            missing_ours = np.concatenate((missing_ours, np.expand_dims(missing_IOU_our, axis=1)), axis=1)
+        else:
+            missing_ours = np.empty((0, 7))
+        
+        common_off, common_ours, remain_off, remain_our = find_common_elements(missing_officials, missing_ours)
 
-    missing_officials = off_pos[missing_indices_row]
-    if len(missing_officials) > 0:
-        missing_IOU_off = max_elements_row[missing_indices_row]
-        missing_officials = np.concatenate((missing_officials,  np.expand_dims(missing_IOU_off, axis=1)), axis=1)
-    else:
-        has_missing_off = True
-        missing_officials = np.empty((0, 7))
+    elif IoU.shape[0] != 0 or IoU.shape[1] != 0:
+        if IoU.shape[0] == 0:
+            scalar_array = np.full((pos.shape[0], 1), 0.0)
+            remain_our = np.concatenate((pos, scalar_array), axis=1)
+            print('Remain Ours:')
+            print(remain_our)
+        if IoU.shape[1] == 0: 
+            scalar_array = np.full((off_pos.shape[0], 1), 0.0)
+            remain_off = np.concatenate((off_pos, scalar_array), axis=1)
+            print('Remain Official:')
+            print(remain_off)
 
-
-    missing_ours = pos[missing_indices_col]
-    if len(missing_ours) > 0:
-        missing_IOU_our = max_elements_col[missing_indices_col]
-        missing_ours = np.concatenate((missing_ours, np.expand_dims(missing_IOU_our, axis=1)), axis=1)
-    else:
-        has_missing_ours = True
-        missing_ours = np.empty((0, 7))
-    
-    common_off, common_ours, remain_off, remain_our = find_common_elements(missing_officials, missing_ours)
-    
     drawMask(filename, common_off, 'common')
     drawMask(filename, remain_off, 'off')
     drawMask(filename, remain_our, 'ours')
@@ -250,14 +248,13 @@ for off_pos, pos, filename in zip(Off_Positions, Positions, sorted_basename):
             file.write(' '.join(map(str, rowB)) + '\n')
         
         file.write("===\n")    
-        # Write array1 to the file
+
         for row in remain_off:
             file.write(' '.join(map(str, row)) + '\n')
 
         # Add "===" between arrays
         file.write("===\n")
 
-        # Write array2 to the file
         for row in remain_our:
             file.write(' '.join(map(str, row))  + '\n')
     
